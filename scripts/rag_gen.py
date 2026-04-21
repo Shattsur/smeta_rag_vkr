@@ -31,6 +31,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from peft import PeftModel
 
+from chunk_metadata import st, normalize_chunk_metadata
 
 # ==================== ЛОГИРОВАНИЕ ====================
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -39,7 +40,6 @@ logger = logging.getLogger("smeta_rag_gen")
 # ==================== КОНСТАНТЫ ====================
 DOC_PREFIX = "search_document: "
 QUERY_PREFIX = "search_query: "
-_CHROMA_ALLOWED = (str, int, float, bool)
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 CODE_RE = re.compile(r"\b\d{2}-\d{2}-\d{3}-\d{2}\b")
@@ -47,9 +47,6 @@ PART_TRASH_RE = re.compile(r"\s*(част[ьи]\s*\d+)\s*$", re.IGNORECASE)
 SOURCES_BLOCK_RE = re.compile(r"\n\s*[{0,2}\s]источники\s*[{0,2}\s]:?\s*\n", re.IGNORECASE)
 QUESTION_LINE_RE = re.compile(r"(?im)^\s*вопрос\s*:\s*.*$", re.IGNORECASE)
 _SENT_SPLIT_RE = re.compile(r'(?<!\w.\w.)(?<![A-Z][a-z].)(?<=\.|\?|!)\s')
-
-def st(x: Any) -> str:
-    return x.strip() if isinstance(x, str) else ""
 
 def uniq(xs: List[str]) -> List[str]:
     seen = set()
@@ -133,60 +130,6 @@ def collect_sources(docs: List[Document], limit: int = 25) -> List[Dict[str, str
 def split_into_sentences(text: str) -> List[str]:
     sentences = re.split(r'(?<!\w.\w.)(?<![A-Z][a-z].)(?<=\.|\?|!)\s+', text)
     return [s.strip() for s in sentences if len(s.strip()) > 15 and not re.match(r'^[\W\d]+$', s.strip())]
-
-def _coerce_metadata_value(v: Any) -> Optional[Any]:
-    if v is None:
-        return None
-    if isinstance(v, _CHROMA_ALLOWED):
-        return v
-    if isinstance(v, (list, dict)):
-        s = json.dumps(v, ensure_ascii=False)
-        return s if s else None
-    try:
-        s = str(v).strip()
-        return s if s else None
-    except Exception:
-        return None
-
-def normalize_chunk_metadata(obj: Dict[str, Any], chunk_id: str) -> Dict[str, Any]:
-    raw_md: Dict[str, Any] = obj.get("metadata", {})
-    text: str = obj.get("text", "")
-    md: Dict[str, Any] = {}
-    md["chunk_id"] = chunk_id
-    md["text_length"] = len(text)
-    source = st(obj.get("source") or raw_md.get("source") or raw_md.get("source_file") or "")
-    if source:
-        md["source"] = source
-    doc_type = st(raw_md.get("doc_type") or raw_md.get("type") or "unknown")
-    md["doc_type"] = doc_type
-    _optional_str_fields = [
-        ("work_code", ["work_code"]), ("question", ["question"]), ("answer", ["answer"]),
-        ("title", ["title"]), ("clause", ["clause"]), ("subclause", ["subclause"]),
-        ("clause_hierarchy", ["clause_hierarchy"]), ("clause_title", ["clause_title"]),
-        ("extraction", ["extraction"]), ("section", ["section"]), ("subsection", ["subsection"]),
-    ]
-    for target_key, source_keys in _optional_str_fields:
-        for sk in source_keys:
-            val = st(raw_md.get(sk) or obj.get(sk) or "")
-            if val:
-                md[target_key] = val
-                break
-    for key in ("page_start", "page_end", "chunk_index", "total_chunks"):
-        raw_val = raw_md.get(key)
-        if raw_val is not None:
-            try:
-                md[key] = int(raw_val)
-            except (ValueError, TypeError):
-                pass
-    clean_md: Dict[str, Any] = {}
-    for k, v in md.items():
-        coerced = _coerce_metadata_value(v)
-        if coerced is None:
-            continue
-        if isinstance(coerced, str) and not coerced:
-            continue
-        clean_md[k] = coerced
-    return clean_md
 
 # ==================== КЭШИРОВАНИЕ РЕРАНКЕРОВ ====================
 _RERANKER_CACHE: Dict[str, Any] = {}
@@ -572,6 +515,21 @@ class UnifiedReranker:
         
         return scores
 
+def _env_optional_truncate_dim() -> Optional[int]:
+    """TRUNCATE_DIM: пусто, 0 или комментарий в .env → None; иначе целое > 0."""
+    raw = os.environ.get("TRUNCATE_DIM", "0")
+    if raw is None:
+        return None
+    s = str(raw).split("#", 1)[0].strip()
+    if not s:
+        return None
+    try:
+        n = int(s)
+    except ValueError:
+        return None
+    return n or None
+
+
 # ==================== НАСТРОЙКИ (SOTA расширенные) ====================
 @dataclass(frozen=True)
 class Settings:
@@ -582,11 +540,11 @@ class Settings:
     embed_model: str = os.environ.get("EMBED_MODEL", "deepvk/USER2-base")
     embed_max_length: int = int(os.environ.get("EMBED_MAX_LENGTH", "512"))
     embed_batch_size: int = int(os.environ.get("EMBED_BATCH_SIZE", "16"))
-    truncate_dim: Optional[int] = int(os.environ.get("TRUNCATE_DIM", "0")) or None
+    truncate_dim: Optional[int] = field(default_factory=_env_optional_truncate_dim)
     
     # --- Реранкер (теперь динамический) ---
     rerank_model: str = os.environ.get("RERANK_MODEL", "Alibaba-NLP/gte-reranker-modernbert-base")
-    rerank_max_length: int = int(os.environ.get("RERANK_MAX_LENGTH", "512"))
+    rerank_max_length: int = int(os.environ.get("RERANK_MAX_LENGTH", "2048"))
     rerank_batch_size: int = int(os.environ.get("RERANK_BATCH_SIZE", "16"))
     reranker_type: str = os.environ.get("RERANKER_TYPE", "auto")  # "auto", "cross_encoder", "transformers"
     

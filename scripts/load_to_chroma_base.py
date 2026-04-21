@@ -1,122 +1,249 @@
 # -*- coding: utf-8 -*-
 """
-slide4_visualization.py — Визуализация: Объект и база исследования
-Стиль: академический, минималистичный, для презентации
+scripts/load_to_chroma_base.py — v4.2
+Загрузка/обновление чанков в Chroma (idempotent: upsert по chunk_id).
+По умолчанию: без полного сброса; при большом числе чанков — «умный кэш» (пропуск), см. --force-load.
+Метаданные — ``normalize_chunk_metadata`` из ``chunk_metadata`` (согласовано с rag_gen).
 """
 
-import matplotlib.pyplot as plt
-from matplotlib.patches import FancyBboxPatch, Circle, Rectangle
-import matplotlib.patches as mpatches
+import os
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+import chromadb
+import torch
+from tqdm import tqdm
+from transformers import AutoTokenizer, AutoModel
+import torch.nn.functional as F
 
-# ==================== НАСТРОЙКИ СТИЛЯ ====================
-plt.rcParams['font.serif'] = ['Times New Roman', 'DejaVu Serif', 'Arial']
-plt.rcParams['font.family'] = 'serif'
-plt.rcParams['font.size'] = 11
-plt.rcParams['axes.unicode_minus'] = False
+from chunk_metadata import normalize_chunk_metadata
 
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.set_xlim(0, 10)
-ax.set_ylim(0, 6)
-ax.axis('off')
+PR = Path(__file__).resolve().parents[1]
 
-# Цветовая палитра
-COLOR_PRIMARY   = '#2E86C1'   # синий
-COLOR_SECONDARY = '#28B463'   # зелёный
-COLOR_ACCENT    = '#8E44AD'   # фиолетовый
-COLOR_BG        = '#F8F9FA'   # светло-серый фон
-COLOR_TEXT      = '#2C3E50'   # тёмный текст
+DEFAULT_EMBED_MODEL = os.environ.get("EMBED_MODEL", "deepvk/USER2-base")
+DEFAULT_COLLECTION = os.environ.get("CHROMA_COLLECTION", "smeta_collection")
+DEFAULT_CHROMA_PATH = os.environ.get("CHROMA_PATH", str(PR / "chroma_db_base"))
+DEFAULT_CHUNKS_JSONL = os.environ.get("CHUNKS_JSONL", str(PR / "data" / "chunks" / "all_chunks.jsonl"))
+DEFAULT_RESET = os.environ.get("CHROMA_RESET", "false").lower() == "true"
+DEFAULT_MAX_LENGTH = int(os.environ.get("EMBED_MAX_LENGTH", "512"))
+SMART_CACHE_THRESHOLD = int(os.environ.get("CHROMA_CACHE_SKIP_MIN", "500"))
+CHROMA_FORCE_LOAD = os.environ.get("CHROMA_FORCE_LOAD", "").lower() in ("1", "true", "yes")
 
-# ==================== ЗАГОЛОВОК СЛАЙДА ====================
-ax.text(5, 5.6, "Слайд 4. Объект и база исследования",
-        ha='center', fontsize=14, fontweight='bold', color=COLOR_TEXT)
 
-# ==================== ЛЕВАЯ КОЛОНКА: Объект и Предмет ====================
-# Блок "Объект"
-obj_box = FancyBboxPatch((0.4, 3.8), 4.0, 1.3,
-                         boxstyle="round,pad=0.3",
-                         fc=COLOR_BG, ec=COLOR_PRIMARY, lw=1.8, zorder=3)
-ax.add_patch(obj_box)
-ax.text(2.4, 4.65, "🏢 Объект", ha='center', va='bottom',
-        fontsize=11, fontweight='bold', color=COLOR_PRIMARY, zorder=4)
-ax.text(2.4, 4.25, "ООО «Промтехсервис»", ha='center', va='top',
-        fontsize=10, color=COLOR_TEXT, zorder=4)
-ax.text(2.4, 3.95, "строительство жилых и нежилых зданий",
-        ha='center', va='top', fontsize=9, style='italic', color='#555', zorder=4)
+def eprint(*args: Any) -> None:
+    print(*args, file=sys.stderr, flush=True)
 
-# Блок "Предмет"
-subj_box = FancyBboxPatch((0.4, 2.2), 4.0, 1.3,
-                          boxstyle="round,pad=0.3",
-                          fc=COLOR_BG, ec=COLOR_SECONDARY, lw=1.8, zorder=3)
-ax.add_patch(subj_box)
-ax.text(2.4, 3.05, "🔍 Предмет анализа", ha='center', va='bottom',
-        fontsize=11, fontweight='bold', color=COLOR_SECONDARY, zorder=4)
-ax.text(2.4, 2.55, "Бизнес-процесс поиска нормативных обоснований",
-        ha='center', va='center', fontsize=9.5, color=COLOR_TEXT, zorder=4, linespacing=1.1)
-ax.text(2.4, 2.32, "инженерами-сметчиками", ha='center', va='top',
-        fontsize=9, style='italic', color='#555', zorder=4)
 
-# ==================== ПРАВАЯ КОЛОНКА: Информационная база ====================
-ax.text(7.0, 4.9, "📚 Информационная база", ha='center',
-        fontsize=12, fontweight='bold', color=COLOR_ACCENT, zorder=4)
+def st(x: Any) -> str:
+    return x.strip() if isinstance(x, str) else ""
 
-# Иконка "База данных" (цилиндр)
-db_x, db_y = 7.0, 3.8
-# Верхний эллипс
-ax.add_patch(Circle((db_x, db_y + 0.25), 0.55, fc=COLOR_PRIMARY, ec='black', lw=1.2, zorder=3))
-# Бока цилиндра
-ax.plot([db_x - 0.55, db_x - 0.55], [db_y + 0.25, db_y - 0.35], color='black', lw=1.2, zorder=3)
-ax.plot([db_x + 0.55, db_x + 0.55], [db_y + 0.25, db_y - 0.35], color='black', lw=1.2, zorder=3)
-# Нижний эллипс (дуга)
-theta = np.linspace(np.pi, 2*np.pi, 50)
-ax.plot(db_x + 0.55 * np.cos(theta), db_y - 0.35 + 0.15 * np.sin(theta),
-        color='black', lw=1.2, zorder=3)
-# Полоски на цилиндре
-for dy in [0.05, -0.15]:
-    ax.plot([db_x - 0.5, db_x + 0.5], [db_y + dy, db_y + dy],
-            color='white', lw=2.5, alpha=0.7, zorder=4)
 
-# Список источников
-sources = [
-    ("📜", "Нормативы Минстроя", "(ФСНБ, ГЭСН, ФЕР)"),
-    ("❓", "База вопросов-ответов ГГЭ", "(≈2 000 записей)"),
-    ("📊", "Внутренние данные предприятия", "(2022–2024 гг.)"),
-]
-for i, (icon, title, subtitle) in enumerate(sources):
-    y_pos = 3.0 - i * 0.75
-    # Фон строки
-    ax.add_patch(FancyBboxPatch((5.4, y_pos - 0.22), 3.2, 0.45,
-                                 boxstyle="round,pad=0.2",
-                                 fc='white', ec='#ccc', lw=0.8, zorder=2))
-    ax.text(5.6, y_pos + 0.08, f"{icon} {title}", ha='left', va='center',
-            fontsize=9.5, fontweight='bold', color=COLOR_TEXT, zorder=3)
-    ax.text(8.5, y_pos - 0.05, subtitle, ha='right', va='center',
-            fontsize=8.5, color='#666', style='italic', zorder=3)
+def safe_json_load(line: str, line_num: int) -> Optional[Dict[str, Any]]:
+    line = line.strip()
+    if not line:
+        return None
+    try:
+        obj = json.loads(line)
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        eprint(f"[WARN] Line {line_num}: Bad JSON, skipping.")
+        return None
 
-# ==================== БЕЙДЖИ ФОРМАТОВ (внизу справа) ====================
-formats = [('PDF', '#E74C3C'), ('XML', '#27AE60'), ('JSON', '#F39C12')]
-for i, (fmt, color) in enumerate(formats):
-    x = 6.0 + i * 1.1
-    badge = FancyBboxPatch((x - 0.45, 0.45), 0.9, 0.5,
-                           boxstyle="round,pad=0.15",
-                           fc=color, ec='white', lw=1.5, zorder=5)
-    ax.add_patch(badge)
-    ax.text(x, 0.7, fmt, ha='center', va='center',
-            fontsize=10, fontweight='bold', color='white', zorder=6)
 
-# Подпись под бейджами
-ax.text(7.0, 0.15, "форматы источников", ha='center', va='top',
-        fontsize=8.5, color='#777', style='italic', zorder=4)
+def choose_device(cli_device: str) -> str:
+    if cli_device in ("cuda", "cpu"):
+        return cli_device
+    return "cuda" if torch.cuda.is_available() and os.environ.get("USE_GPU", "true").lower() == "true" else "cpu"
 
-# ==================== ДЕКОРАТИВНАЯ ЛИНИЯ-РАЗДЕЛИТЕЛЬ ====================
-ax.plot([4.7, 4.7], [0.8, 5.2], color='#ddd', lw=1.2, linestyle=':', zorder=1)
 
-# ==================== СОХРАНЕНИЕ ====================
-plt.subplots_adjust(left=0.05, right=0.95, top=0.92, bottom=0.08)
-plt.savefig('slide4_object_base.png', dpi=300, bbox_inches='tight', facecolor='white')
-plt.savefig('slide4_object_base.pdf', format='pdf', bbox_inches='tight', facecolor='white')
-plt.show()
+def infer_dtype(device: str, cli_dtype: str) -> torch.dtype:
+    if cli_dtype != "auto":
+        return {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}[cli_dtype]
+    return torch.float16 if device == "cuda" else torch.float32
 
-print("✅ Слайд 4 сохранён: slide4_object_base.png / .pdf")
-print("   • Объект и предмет — слева")
-print("   • Иконка БД + источники — справа")
-print("   • Бейджи PDF/XML/JSON — внизу как иллюстрация форматов")
+
+class USER2Embedder:
+    def __init__(self, model_name_or_path: str, device: str, max_length: int,
+                 batch_size: int, dtype: torch.dtype, truncate_dim: Optional[int] = None):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
+        self.model = AutoModel.from_pretrained(model_name_or_path, dtype=dtype).eval().to(device)
+        self.device = device
+        self.max_length = max_length
+        self.batch_size = batch_size
+        self.truncate_dim = truncate_dim
+
+    def mean_pooling(self, model_output, attention_mask):
+        token_embeddings = model_output.last_hidden_state
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
+        sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+        return sum_embeddings / sum_mask
+
+    @torch.no_grad()
+    def _encode(self, texts: List[str]) -> List[List[float]]:
+        out = []
+        for i in range(0, len(texts), self.batch_size):
+            bt = texts[i:i + self.batch_size]
+            batch = self.tokenizer(bt, padding=True, truncation=True, max_length=self.max_length, return_tensors="pt")
+            batch = {k: v.to(self.device) for k, v in batch.items()}
+            outputs = self.model(**batch)
+            emb = self.mean_pooling(outputs, batch["attention_mask"])
+            if self.truncate_dim:
+                emb = emb[:, :self.truncate_dim]
+            emb = F.normalize(emb, p=2, dim=1)
+            out.extend(emb.float().cpu().tolist())
+        return out
+
+    def embed_documents(self, docs: List[str]) -> List[List[float]]:
+        prefixed = [f"search_document: {doc}" for doc in docs]
+        return self._encode(prefixed)
+
+    # ←←← ИСПРАВЛЕНИЕ: добавлен метод embed_query
+    def embed_query(self, query: str) -> List[float]:
+        prefixed = f"search_query: {query}"
+        return self._encode([prefixed])[0]
+
+
+def parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Загрузка чанков в Chroma")
+    ap.add_argument("--jsonl", default=DEFAULT_CHUNKS_JSONL)
+    ap.add_argument("--chroma-path", default=DEFAULT_CHROMA_PATH)
+    ap.add_argument("--collection", default=DEFAULT_COLLECTION)
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--reset", action="store_true", help="Полный сброс коллекции")
+    g.add_argument("--no-reset", action="store_true")
+    ap.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"])
+    ap.add_argument("--model", default=DEFAULT_EMBED_MODEL)
+    ap.add_argument("--dtype", default="auto", choices=["auto", "fp16", "bf16", "fp32"])
+    ap.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
+    ap.add_argument("--embed-batch-size", type=int, default=16)
+    ap.add_argument("--batch-size", type=int, default=50)
+    ap.add_argument("--max-lines", type=int, default=0)
+    ap.add_argument("--no-progress", action="store_true")
+    ap.add_argument("--truncate-dim", type=int, default=None)
+    ap.add_argument(
+        "--sanity-query", type=str, default="Устройство подвесных потолков",
+        help="Пустая строка или --skip-sanity — не выполнять проверочный запрос",
+    )
+    ap.add_argument("--sanity-topk", type=int, default=5)
+    ap.add_argument("--skip-sanity", action="store_true", help="Пропустить sanity query")
+    ap.add_argument(
+        "--force-load", action="store_true",
+        help="Игнорировать smart-cache (всегда прогнать jsonl/upsert). Env: CHROMA_FORCE_LOAD=1",
+    )
+    return ap.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    jsonl_path = Path(args.jsonl)
+    chroma_path = Path(args.chroma_path)
+
+    if not jsonl_path.exists():
+        eprint(f"[ERROR] JSONL not found: {jsonl_path}")
+        return 1
+
+    reset = args.reset or (DEFAULT_RESET and not args.no_reset)
+    device = choose_device(args.device)
+    dtype = infer_dtype(device, args.dtype)
+
+    print("=" * 70)
+    print("Chroma Loader v4.2 (upsert, shared chunk metadata)")
+    print(f"- reset: {reset}")
+    print("=" * 70)
+
+    embedder = USER2Embedder(args.model, device, args.max_length, args.embed_batch_size, dtype, args.truncate_dim)
+    print("✅ Embedder OK")
+
+    client = chromadb.PersistentClient(path=str(chroma_path))
+    if reset:
+        try:
+            client.delete_collection(args.collection)
+            print("🗑️ Коллекция сброшена")
+        except Exception as e:
+            eprint(f"[WARN] delete_collection: {e}")
+
+    collection = client.get_or_create_collection(
+        name=args.collection,
+        metadata={"hnsw:space": "cosine", "embedding_model": args.model}
+    )
+    print("✅ Chroma OK")
+
+    existing_count = collection.count()
+    force_load = args.force_load or CHROMA_FORCE_LOAD
+    if not reset and not force_load and existing_count > SMART_CACHE_THRESHOLD:
+        print(
+            f"✅ Smart Cache: уже {existing_count} документов (>{SMART_CACHE_THRESHOLD}) — "
+            f"пропускаем загрузку. Для повторной индексации: --force-load или CHROMA_FORCE_LOAD=1"
+        )
+    else:
+        print(f"📦 Загрузка чанков (было в коллекции: {existing_count}) — upsert по chunk_id...")
+
+        batch_docs, batch_ids, batch_mds = [], [], []
+        seen_ids = set()
+        duplicate_count = bad_rows = loaded_count = 0
+
+        def flush_batch():
+            nonlocal loaded_count
+            if not batch_docs:
+                return
+            try:
+                embs = embedder.embed_documents(batch_docs)
+                collection.upsert(
+                    documents=batch_docs, ids=batch_ids, metadatas=batch_mds, embeddings=embs
+                )
+                loaded_count += len(batch_docs)
+            except Exception as e:
+                eprint(f"[WARN] upsert() failed: {e}")
+
+        it = enumerate(jsonl_path.open("r", encoding="utf-8"), 1)
+        if not args.no_progress:
+            it = tqdm(it, desc="Загрузка", unit="chunk")
+
+        for line_num, line in it:
+            if args.max_lines and line_num > args.max_lines:
+                break
+            obj = safe_json_load(line, line_num)
+            if not obj:
+                bad_rows += 1
+                continue
+            chunk_id = st(obj.get("chunk_id", ""))
+            text = st(obj.get("text", ""))
+            if not chunk_id or not text:
+                bad_rows += 1
+                continue
+            if chunk_id in seen_ids:
+                duplicate_count += 1
+                continue
+            seen_ids.add(chunk_id)
+            md = normalize_chunk_metadata(obj, chunk_id)
+            batch_docs.append(text)
+            batch_ids.append(chunk_id)
+            batch_mds.append(md)
+            if len(batch_docs) >= args.batch_size:
+                flush_batch()
+                batch_docs, batch_ids, batch_mds = [], [], []
+
+        flush_batch()
+        print(f"\n✅ Загрузка завершена — всего: {collection.count()}")
+
+    # Sanity query
+    do_sanity = st(args.sanity_query) and not args.skip_sanity
+    if do_sanity:
+        print("\nSanity query:", args.sanity_query)
+        q_emb = embedder.embed_query(args.sanity_query)
+        res = collection.query(query_embeddings=[q_emb], n_results=args.sanity_topk,
+                               include=["documents", "metadatas", "distances"])
+        for rank, (dist, id_, md, doc) in enumerate(zip(res["distances"][0], res["ids"][0], res["metadatas"][0], res["documents"][0])):
+            cluster_id = md.get('cluster_id', 'N/A') if md else 'N/A'
+            work_code = md.get('work_code', 'N/A') if md else 'N/A'
+            print(f"{rank+1:02d}) dist={dist:.4f} id={id_} work_code={work_code} cluster={cluster_id}")
+            print(f"    {(doc[:200]).replace('\n', ' ')}...")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
