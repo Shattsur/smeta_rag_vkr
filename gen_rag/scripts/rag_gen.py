@@ -15,11 +15,23 @@ import os
 import re
 import sys
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple, Optional
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_GEN_RAG_ROOT = Path(__file__).resolve().parent.parent  # каталог gen_rag/ (не CWD)
+
+
+def _resolve_gen_rag_path(s: str) -> str:
+    """Относительные пути разрешаются относительно gen_rag/, а не текущей директории."""
+    if not s or not str(s).strip():
+        return s
+    p = Path(s)
+    if p.is_absolute():
+        return str(p.resolve())
+    return str((_GEN_RAG_ROOT / p).resolve())
+
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
@@ -1217,7 +1229,7 @@ def main():
     args = parse_args()
     
     # ---- Загрузка оптимизированных параметров (всегда, если файл существует) ----
-    opt_params = load_optimized_params(args.optimized_params)
+    opt_params = load_optimized_params(_resolve_gen_rag_path(args.optimized_params))
     # Преобразование имён: reranker_model -> rerank_model
     if "reranker_model" in opt_params:
         opt_params["rerank_model"] = opt_params.pop("reranker_model")
@@ -1259,26 +1271,18 @@ def main():
         cli_overrides["final_k"] = args.final_k
     
     final_params.update(cli_overrides)
+
+    # Пути от env/дефолтов — относительно gen_rag/, чтобы запуск из корня монорепо работал
+    for _key in ("chroma_dir", "chunks_jsonl"):
+        if final_params.get(_key):
+            final_params[_key] = _resolve_gen_rag_path(str(final_params[_key]))
     
     # Вывод используемых параметров
     print_parameters(final_params)
     
-    # Создаём объект Settings с итоговыми параметрами
-    settings = Settings(
-        fusion_strategy=final_params["fusion_strategy"],
-        hybrid_alpha=final_params["hybrid_alpha"],
-        retrieval_mode=final_params["retrieval_mode"],
-        adaptive_threshold=final_params["adaptive_threshold"],
-        rerank_model=final_params["rerank_model"],
-        reranker_type=final_params["reranker_type"],
-        pool_k=final_params["pool_k"],
-        bm25_k=final_params["bm25_k"],
-        vec_k=final_params["vec_k"],
-        rrf_k=final_params["rrf_k"],
-        rerank_k=final_params["rerank_k"],
-        rerank_threshold=final_params["rerank_threshold"],
-        final_k=final_params["final_k"],
-    )
+    # Создаём объект Settings с итоговыми параметрами (все поля из merge, не только retrieval)
+    _settings_field_names = {f.name for f in fields(Settings)}
+    settings = Settings(**{k: v for k, v in final_params.items() if k in _settings_field_names})
     
     app = SmetaRAGApp(settings)
     
