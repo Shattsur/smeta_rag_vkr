@@ -29,7 +29,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ===================== ПУТИ =====================
-BASE_DIR = Path(r"C:\Files\AI\SmetaGPT\smeta_rag_project")
+# BASE_DIR — корень подпроекта gen_rag (gen_rag/scripts/reranker_train_nemotron.py -> gen_rag/)
+BASE_DIR = Path(__file__).resolve().parents[1]
 TRAIN_PATH = BASE_DIR / "data" / "rerank" / "train_pairs.jsonl"
 EVAL_PATH  = BASE_DIR / "data" / "rerank" / "eval_pairs.jsonl"
 MODEL_PATH = BASE_DIR / "models" / "Nemotron-Rerank-1B-4bit"

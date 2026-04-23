@@ -25,7 +25,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import fitz  # PyMuPDF
 
 # ===================== CONFIG =====================
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Дефолтные пути интерпретируются относительно CWD:
+# запустите скрипт из корня подпроекта (например, из gen_rag/), чтобы
+# получить ./data/pdfs и ./data/raw внутри подпроекта. Для других
+# входных/выходных путей используйте аргументы командной строки.
+PROJECT_ROOT = Path.cwd()
 PDF_DIR = PROJECT_ROOT / "data" / "pdfs"
 OUT_DIR = PROJECT_ROOT / "data" / "raw"
 OUT_FILE = OUT_DIR / "official_docs.jsonl"

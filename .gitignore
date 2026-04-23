@@ -1,10 +1,8 @@
-chroma_db_base/
+# === Python env ===
 smeta_rag_env/
-data/
-models/
-.env
-smeta_rag_env/
-archive/
+*_rag_env/
+
+# === Python bytecode ===
 __pycache__/
 *.pyc
 *.pyo
@@ -19,3 +17,33 @@ build/
 *.pid
 *.sqlite3
 .ipynb_checkpoints/
+
+# === Secrets / env ===
+.env
+*/.env
+!/.env.example
+!/*/.env.example
+
+# === Legacy paths (на всякий случай, если вдруг появятся в корне) ===
+/chroma_db/
+/chroma_db_base/
+/data/
+/models/
+/output/
+
+# === gen_rag artifacts ===
+gen_rag/chroma_db/
+gen_rag/chroma_db_base/
+gen_rag/data/
+gen_rag/models/
+gen_rag/output/
+
+# === graph_rag artifacts ===
+graph_rag/graph_db/
+graph_rag/chroma_db/
+graph_rag/data/
+graph_rag/models/
+graph_rag/output/
+
+# === archive (исторические версии скриптов) ===
+archive/

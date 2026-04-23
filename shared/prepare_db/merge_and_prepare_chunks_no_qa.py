@@ -27,7 +27,10 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 def project_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    # Возвращает CWD (см. другие скрипты shared/prepare_db/): запускайте
+    # из корня подпроекта (gen_rag/ или graph_rag/), либо передавайте
+    # явные пути через argparse.
+    return Path.cwd()
 
 
 def jload_line(line: str) -> Optional[Dict[str, Any]]:

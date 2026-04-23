@@ -5,8 +5,10 @@ from tqdm import tqdm
 from openai import OpenAI
 
 # ===================== НАСТРОЙКИ =====================
-INPUT_PATH  = Path(r"C:\Files\AI\SmetaGPT\smeta_rag_project\data\raw\official_docs.jsonl")
-OUTPUT_PATH = Path(r"C:\Files\AI\SmetaGPT\smeta_rag_project\data\rerank\qa_minstroy.jsonl")
+# Пути относительно корня подпроекта gen_rag
+_BASE_DIR = Path(__file__).resolve().parents[1]
+INPUT_PATH  = _BASE_DIR / "data" / "raw" / "official_docs.jsonl"
+OUTPUT_PATH = _BASE_DIR / "data" / "rerank" / "qa_minstroy.jsonl"
 
 client = OpenAI(
     base_url="http://localhost:1234/v1",

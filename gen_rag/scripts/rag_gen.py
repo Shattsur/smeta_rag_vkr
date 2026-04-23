@@ -13,10 +13,16 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple, Optional
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 import torch
 import torch.nn.functional as F
 from sentence_transformers import CrossEncoder
@@ -31,7 +37,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from peft import PeftModel
 
-from chunk_metadata import st, normalize_chunk_metadata
+from shared.chunking.chunk_metadata import st, normalize_chunk_metadata
 
 # ==================== ЛОГИРОВАНИЕ ====================
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")

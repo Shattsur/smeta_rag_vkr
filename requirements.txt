@@ -1,0 +1,24 @@
+# Общие зависимости обоих подпроектов.
+# Установка: pip install -r requirements.txt -r gen_rag/requirements.txt
+# (graph_rag/requirements.txt — по мере реализации)
+
+# --- Core ML / DL ---
+torch
+transformers
+sentence-transformers
+numpy
+scikit-learn
+
+# --- LangChain (общее ядро) ---
+langchain-core
+langchain-community
+langchain-text-splitters
+langchain-openai
+
+# --- Парсеры (shared/prepare_db) ---
+pymupdf
+beautifulsoup4
+requests
+
+# --- Утилиты ---
+tqdm

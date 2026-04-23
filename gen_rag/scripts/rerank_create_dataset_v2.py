@@ -3,6 +3,7 @@ import json
 import random
 import re
 import time
+from pathlib import Path
 from datasets import Dataset
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import mine_hard_negatives
@@ -11,16 +12,18 @@ from tqdm import tqdm
 from rank_bm25 import BM25Okapi
 
 # ===================== ПАРАМЕТРЫ =====================
+# Все пути разрешаются относительно корня подпроекта gen_rag
+_BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_PATHS = [
-    r"C:\Files\AI\SmetaGPT\smeta_rag_project\data\raw\gge_qa.jsonl",
-    r"C:\Files\AI\SmetaGPT\smeta_rag_project\data\raw\smetnoedelo_qa.cleaned.jsonl",
-    r"C:\Files\AI\SmetaGPT\smeta_rag_project\data\rerank\qa_minstroy.jsonl",
+    str(_BASE_DIR / "data" / "raw" / "gge_qa.jsonl"),
+    str(_BASE_DIR / "data" / "raw" / "smetnoedelo_qa.cleaned.jsonl"),
+    str(_BASE_DIR / "data" / "rerank" / "qa_minstroy.jsonl"),
 ]
 
-FSNB_CHUNKS_PATH = r"C:\Files\AI\SmetaGPT\smeta_rag_project\data\raw\fsnb_chunks.jsonl"
+FSNB_CHUNKS_PATH = str(_BASE_DIR / "data" / "raw" / "fsnb_chunks.jsonl")
 
-TRAIN_PATH = r"C:\Files\AI\SmetaGPT\smeta_rag_project\data\rerank\train_pairs.jsonl"
-EVAL_PATH  = r"C:\Files\AI\SmetaGPT\smeta_rag_project\data\rerank\eval_pairs.jsonl"
+TRAIN_PATH = str(_BASE_DIR / "data" / "rerank" / "train_pairs.jsonl")
+EVAL_PATH  = str(_BASE_DIR / "data" / "rerank" / "eval_pairs.jsonl")
 
 # ===================== ГИБРИДНЫЕ ПАРАМЕТРЫ MINING =====================
 NUM_HARD_NEGATIVES = 7

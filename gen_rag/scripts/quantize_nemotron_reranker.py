@@ -5,7 +5,8 @@ from pathlib import Path
 import time
 
 MODEL_NAME = "nvidia/llama-nemotron-rerank-1b-v2"
-SAVE_DIR = Path("./models/Nemotron-Rerank-1B-4bit")
+_BASE_DIR = Path(__file__).resolve().parents[1]
+SAVE_DIR = _BASE_DIR / "models" / "Nemotron-Rerank-1B-4bit"
 
 print("🔄 Начинаем 4-битное квантование NVIDIA Nemotron Rerank 1B v2...")
 

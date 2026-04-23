@@ -8,7 +8,9 @@ from huggingface_hub import login, create_repo, create_commit, CommitOperationAd
 import os
 
 # ===================== НАСТРОЙКИ =====================
-ADAPTER_PATH = Path(r"./models/Nemotron-Rerank-1B-4bit-finetuned/ndcg_best")
+# Пути относительно корня подпроекта gen_rag
+_BASE_DIR = Path(__file__).resolve().parents[1]
+ADAPTER_PATH = _BASE_DIR / "models" / "Nemotron-Rerank-1B-4bit-finetuned" / "ndcg_best"
 HF_REPO_ID = "Shattsur/nemotron-smeta-4bit-adapter"
 BASE_MODEL_HF = "nvidia/llama-nemotron-rerank-1b-v2"  # ← HF ID базы
 PRIVATE = True

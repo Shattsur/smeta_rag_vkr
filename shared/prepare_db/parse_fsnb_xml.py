@@ -23,8 +23,10 @@ class Chunk:
 
 
 def project_root() -> Path:
-    # .../smeta_rag_project/scripts/parse_fsnb_xml.py -> .../smeta_rag_project
-    return Path(__file__).resolve().parents[1]
+    # Возвращает CWD: CLI-дефолты путей (data/raw/..., data/chunks/...)
+    # ожидаются относительно корня подпроекта (gen_rag/ или graph_rag/),
+    # откуда запускается скрипт. Явные пути всегда можно передать через argparse.
+    return Path.cwd()
 
 
 def iter_normative_chunks(xml_path: Path, start_index: int = 0) -> tuple[int, list[Chunk]]:

@@ -1,0 +1,26 @@
+# Зависимости gen_rag (гибридный retrieval + rerank).
+# Устанавливаются поверх корневого requirements.txt.
+
+# --- Vector DB ---
+chromadb
+langchain-chroma
+
+# --- BM25 ---
+rank-bm25
+
+# --- Fine-tuning / квантование реранкера ---
+peft
+accelerate
+bitsandbytes
+datasets
+
+# --- Оптимизация параметров ---
+optuna
+
+# --- Визуализация (для ga_optimization) ---
+matplotlib
+seaborn
+pandas
+
+# --- HF Hub (push_adapter_to_hf) ---
+huggingface-hub

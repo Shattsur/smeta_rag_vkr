@@ -12,15 +12,19 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+PR = Path(__file__).resolve().parents[1]
+_REPO_ROOT = PR.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 import chromadb
 import torch
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel
 import torch.nn.functional as F
 
-from chunk_metadata import normalize_chunk_metadata
-
-PR = Path(__file__).resolve().parents[1]
+from shared.chunking.chunk_metadata import normalize_chunk_metadata
 
 DEFAULT_EMBED_MODEL = os.environ.get("EMBED_MODEL", "deepvk/USER2-base")
 DEFAULT_COLLECTION = os.environ.get("CHROMA_COLLECTION", "smeta_collection")
