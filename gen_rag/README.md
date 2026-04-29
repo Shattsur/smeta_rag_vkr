@@ -29,7 +29,7 @@ gen_rag/
     └── prepare_db/            # совместимые обёртки
 ```
 
-Парсеры источников вынесены в `shared/prepare_db/` на уровне монорепо и переиспользуются между `gen_rag` и `graph_rag`.
+Парсеры источников вынесены в `shared/prepare_db/` на уровне репозитория; из `gen_rag` вызываются через тонкие обёртки в `gen_rag/scripts/prepare_db/`.
 
 ## Установка
 
@@ -47,7 +47,7 @@ pip install -e .
 
 ```bash
 cd gen_rag
-python scripts/rag_gen.py --query "Ваш вопрос"
+python scripts/rag_gen.py --ask "Ваш вопрос"
 ```
 
 ## Подготовка базы знаний

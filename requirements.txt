@@ -1,24 +1,37 @@
-# Общие зависимости обоих подпроектов.
+# Общие зависимости репозитория (shared + основа для gen_rag).
 # Установка: pip install -r requirements.txt -r gen_rag/requirements.txt
-# (graph_rag/requirements.txt — по мере реализации)
 
 # --- Core ML / DL ---
 torch
-transformers
+transformers>=4.50
 sentence-transformers
 numpy
 scikit-learn
+accelerate
+safetensors
+einops
 
-# --- LangChain (общее ядро) ---
+# --- LLM-инференс локально (агентский парсер PDF) ---
+# autoawq — 4-bit AWQ-инференс (план A для Qwen2.5-VL-7B-Instruct-AWQ)
+# bitsandbytes — резерв для on-the-fly 4-bit, если AutoAWQ не заведётся
+qwen-vl-utils
+# autoawq            # ставится при необходимости (см. README), требует CUDA-сборку под GPU
+# bitsandbytes>=0.45 # альтернатива autoawq
+
+# --- LangChain (gen_rag: rag_gen, retrieval) ---
+langchain
 langchain-core
 langchain-community
 langchain-text-splitters
 langchain-openai
+pydantic>=2
 
 # --- Парсеры (shared/prepare_db) ---
 pymupdf
 beautifulsoup4
 requests
+Pillow
+markdown-it-py
 
 # --- Утилиты ---
 tqdm

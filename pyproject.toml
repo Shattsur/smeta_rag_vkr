@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "smeta-rag"
 version = "0.2.0"
-description = "Monorepo для сметных RAG-систем: gen_rag (гибридный retrieval + rerank) и graph_rag (графовый RAG)."
+description = "Smeta RAG: gen_rag (гибридный retrieval + rerank) и общая библиотека shared (парсеры, метаданные чанков)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Proprietary" }
@@ -13,5 +13,5 @@ authors = [{ name = "SmetaGPT" }]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["shared*", "gen_rag*", "graph_rag*"]
+include = ["shared*", "gen_rag*"]
 exclude = ["archive*", "smeta_rag_env*"]

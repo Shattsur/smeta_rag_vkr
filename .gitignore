@@ -38,12 +38,7 @@ gen_rag/data/
 gen_rag/models/
 gen_rag/output/
 
-# === graph_rag artifacts ===
-graph_rag/graph_db/
-graph_rag/chroma_db/
-graph_rag/data/
-graph_rag/models/
-graph_rag/output/
+
 
 # === archive (исторические версии скриптов) ===
 archive/

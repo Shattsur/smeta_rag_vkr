@@ -1,7 +1,0 @@
-# Зависимости graph_rag. Заполняется по мере реализации.
-# Пример:
-# neo4j
-# networkx
-# rdflib
-# llama-index
-# llama-index-graph-stores-neo4j

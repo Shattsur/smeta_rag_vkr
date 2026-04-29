@@ -1,62 +1,54 @@
 # smeta_rag_project
 
-Монорепозиторий с двумя RAG-системами для сметной нормативной документации.
+Репозиторий с **gen_rag** — гибридный retrieval (BM25 + вектор) с RRF-fusion и дообученным реранкером (NVIDIA Nemotron 1B, 4-bit LoRA); параметры подбираются NSGA-II. Достигнутый общий score в эксперименте: **2.9736 / 3.0**.
 
-- gen_rag/ — рабочая реализация: гибридный поиск (BM25 + вектор) + RRF-fusion + дообученный реранкер (NVIDIA Nemotron 1B, 4-bit LoRA), подобранный NSGA-II. Достигнутый общий score 2.9736 / 3.0.
-- graph_rag/ — графовый RAG (в разработке): извлечение сущностей и отношений, граф знаний, обход графа при retrieval.
+Общий код парсинга источников и нормализации метаданных чанков вынесен в **`shared/`** и подключается из `gen_rag`.
 
 ## Структура
 
-- `.env.example` — общий шаблон переменных окружения.
-- `.gitignore`, `pyproject.toml`, `requirements.txt` — общие файлы монорепо.
-- `smeta_rag_env/` — одно виртуальное окружение на оба подпроекта.
-- `shared/` — переиспользуемые модули:
-  - `shared/chunking/chunk_metadata.py` — нормализация метаданных чанков (используется обоими подпроектами).
-  - `shared/prepare_db/` — парсеры PDF, ФСНБ XML и QA-сырья. Дефолты путей относительны CWD, запускайте из корня подпроекта.
-  - `shared/io/`, `shared/llm/` — плейсхолдеры под будущие общие утилиты.
-- `gen_rag/` — текущая реализация (см. `gen_rag/README.md`):
-  - `.env`, `.env.example`, `requirements.txt`, `README.md`.
-  - `data/`, `chroma_db/`, `models/`, `output/` — артефакты (в .gitignore).
-  - `scripts/` — `rag_gen.py`, `fit_params_optuna_nsgaii_v3.py`, `load_to_chroma_base.py`, `reranker_train_nemotron.py`, `quantize_nemotron_reranker.py`, `rerank_create_dataset_v2.py`, `rerank_create_qa_minstroy.py`, `push_adapter_to_hf.py`.
-- `graph_rag/` — графовый RAG (см. `graph_rag/README.md`):
-  - `.env.example`, `requirements.txt`, `README.md`.
-  - `data/`, `graph_db/`, `models/`, `output/`, `scripts/` — будут заполняться по мере реализации.
+- `.env.example` — шаблон переменных окружения.
+- `.gitignore`, `pyproject.toml`, `requirements.txt` — конфигурация репозитория.
+- `smeta_rag_env/` — виртуальное окружение (локально; в `.gitignore`).
+- `shared/` — библиотека для монорепо:
+  - `shared/chunking/chunk_metadata.py` — метаданные чанков (используется `gen_rag`).
+  - `shared/prepare_db/` — парсеры PDF, ФСНБ XML и QA; дефолты путей относительны CWD — **запускайте скрипты из каталога `gen_rag/`**.
+  - `shared/io/`, `shared/llm/` — заготовки под утилиты.
+- `gen_rag/` — основной пакет (см. `gen_rag/README.md`):
+  - `.env`, `.env.example`, `requirements.txt`.
+  - `data/`, `chroma_db/`, `models/`, `output/` — артефакты (в `.gitignore`).
+  - `scripts/` — пайплайн RAG и обучение/оптимизация.
 - `archive/` — исторические версии скриптов.
 
 ## Установка
 
-С активированным `smeta_rag_env`:
+С активированным окружением (например `smeta_rag_env`):
 
-``
+```bash
 pip install -r requirements.txt
 pip install -r gen_rag/requirements.txt
 pip install -e .
-``
+```
 
-Без `pip install -e .` скрипты тоже работают: в них добавлен `sys.path`-fallback, указывающий на корень монорепо, но editable-установка делает импорты чище при работе из REPL/тестов.
+Без `pip install -e .` импорты `shared` и `gen_rag` из скриптов всё равно работают за счёт `sys.path` в точках входа; editable-установка удобнее для REPL и тестов.
 
-## Запуск
+## Запуск RAG
 
-Каждый подпроект самодостаточен и запускается из своего корня, чтобы относительные пути в `.env` и CLI-дефолты разрешались корректно:
+Из каталога `gen_rag/`, чтобы совпали относительные пути и `.env`:
 
-``
+```bash
 cd gen_rag
-python scripts/rag_gen.py --query "Ваш вопрос"
-``
+python scripts/rag_gen.py --ask "Ваш вопрос"
+```
 
-Парсеры из `shared/prepare_db/` тоже рассчитаны на запуск из корня подпроекта (их дефолты — `./data/raw/...`, `./data/chunks/...`).
+Парсеры (`shared/prepare_db/`, обёртки в `gen_rag/scripts/prepare_db/`) рассчитаны на **текущую рабочую директорию `gen_rag/`** (пути вида `./data/raw/...`, `./data/chunks/...`).
 
 ## Ответственности
 
-| Ресурс | gen_rag | graph_rag | shared / корень |
-|---|---|---|---|
-| `.git`, `.gitignore`, `pyproject.toml`, `requirements.txt` | — | — | корень |
-| Виртуальное окружение `smeta_rag_env/` | — | — | корень |
-| Парсинг источников (PDF / XML / QA) | — | — | `shared/prepare_db/` |
-| Нормализация метаданных чанков | — | — | `shared/chunking/` |
-| Данные (`data/`) | свои | свои | — |
-| Хранилище | Chroma | Neo4j / NetworkX (TBD) | — |
-| Модели (реранкер, эмбеддинги) | свои | свои | — |
-| `.env`, основные скрипты RAG | свои | свои | — |
+| Ресурс | Расположение |
+|--------|----------------|
+| Git, `pyproject.toml`, корневой `requirements.txt` | корень |
+| Виртуальное окружение | корень (`smeta_rag_env/` — локально) |
+| Парсинг источников, метаданные чанков | `shared/` |
+| Данные, Chroma, модели реранкера, скрипты RAG | `gen_rag/` |
 
-Подробнее — в `gen_rag/README.md` и `graph_rag/README.md`.
+Подробнее по сценариям подготовки данных и обучения — в **`gen_rag/README.md`**.
